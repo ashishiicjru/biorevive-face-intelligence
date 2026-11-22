@@ -1,0 +1,3 @@
+Unzip and double-click START_WINDOWS.bat, which creates a fresh environment (no more Python mismatches). Then open http://127.0.0.1:8000.
+RUN_PROGRAMS_WINDOWS.bat is a menu for the six programs.
+Camera pages work in limited mode until the MediaPipe landmark model is installed. In limited mode the app can't report "Focused". Install it from the Model Manager page for full mode.

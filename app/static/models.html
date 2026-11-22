@@ -1,0 +1,25 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model Manager · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Model Manager" data-sub="Download, verify and repair the computer-vision models">
+<div class="grid g-main">
+ <div class="card"><div class="row spread"><div><div class="eyebrow">Registry</div><h2 style="margin:0">Computer-vision models</h2><span class="muted">Folder: <code id="dir">…</code></span></div><div class="row"><button class="btn primary" id="instAll">Install recommended</button><button class="btn" id="refresh">Refresh</button></div></div><div id="tbl" class="mt muted">Loading…</div></div>
+ <div class="col"><div class="card"><div class="eyebrow">Add any model file</div><label>Name</label><input type="text" id="cName" placeholder="my_model"><label class="mt">Direct download URL</label><input type="text" id="cUrl" placeholder="https://…/model.onnx"><label class="mt">SHA-256 (optional but recommended)</label><input type="text" id="cSha"><div class="row mt"><button class="btn" id="cAdd">Register &amp; download</button></div><p class="muted mt"><small>Custom models are verified and stored in the model folder for your own code; the app itself uses only the built-in models.</small></p></div>
+  <div class="card"><div class="eyebrow">Command line</div><p><code>python -m app.download_models --list</code></p><p><code>python -m app.download_models --all</code></p><p><code>python -m app.download_models --verify</code></p><p class="muted"><small>Downloads resume if interrupted and are SHA-256 verified, so a corrupt file is repaired automatically.</small></p></div></div>
+</div>
+<script src="/static/js/core.js"></script>
+<script>
+let timer=null;
+function render(d){$('#dir').textContent=d.model_dir;let busy=false;
+ $('#tbl').innerHTML='<table><tr><th>Model</th><th>Task</th><th>Size</th><th>Status</th><th></th></tr>'+d.models.map(m=>{const j=m.job,run=j&&j.state==='running';if(run)busy=true;
+  let st=m.state==='installed'?'<span class="chip ok">✓ installed</span>':m.state==='corrupt'?'<span class="chip warn">⚠ corrupt</span>':'<span class="chip">not installed</span>';
+  if(run)st='<span class="chip info"><span class="spinner"></span> '+(j.total?Math.round(j.done*100/j.total)+'%':(j.done/1e6).toFixed(1)+' MB')+'</span>';else if(j&&j.state==='error')st+=`<div class="muted" style="color:#ffc0ca"><small>${esc(j.error)}</small></div>`;
+  const btn=run?'':`<button class="btn sm" data-m="${esc(m.name)}" data-f="${m.state==='installed'?1:0}">${m.state==='installed'?'Re-download':m.state==='corrupt'?'Repair':'Install'}</button>`;
+  return `<tr><td><b>${esc(m.title)}</b>${m.recommended?' <span class="chip info">recommended</span>':''}<br><small class="muted">${esc(m.description)}</small></td><td>${esc(m.task)}</td><td>${m.size_mb??'—'} MB</td><td>${st}</td><td>${btn}</td></tr>`}).join('')+'</table>';
+ $$('#tbl button[data-m]').forEach(b=>b.onclick=()=>install([b.dataset.m],b.dataset.f==='1'));
+ clearTimeout(timer);if(busy)timer=setTimeout(load,900)}
+async function load(){try{render(await api('/api/models'))}catch(e){$('#tbl').textContent=e.message}}
+async function install(names,force){try{await api('/api/models/install',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({names,force})});await load();sysStatus()}catch(e){toast(e.message,'bad')}}
+$('#instAll').onclick=()=>install(null,false);$('#refresh').onclick=load;
+$('#cAdd').onclick=async()=>{try{await api('/api/models/custom',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:$('#cName').value.trim(),url:$('#cUrl').value.trim(),sha256:$('#cSha').value.trim()||null})});toast('Registered — downloading','ok');load()}catch(e){toast(e.message,'bad')}};
+load();
+</script></body></html>

@@ -1,0 +1,75 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Expression Lab · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Expression Lab" data-sub="Facial-expression recognition · EfficientNet-B0 trained on AffectNet">
+<div id="banner"></div>
+<div class="tabs" id="tabs"><button class="on" data-pane="pLive">Live camera</button><button data-pane="pUp">Photo upload</button></div>
+
+<div class="pane on mt" id="pLive">
+ <div class="grid g-main">
+  <div>
+   <div class="stage"><video id="v" playsinline muted></video><canvas class="ov" id="ov"></canvas>
+     <div class="ph" id="ph"><div><div style="font-size:42px">📷</div><b>Camera is off</b><br><small>Click “Start camera”. Frames are analysed on this machine and are not stored.</small></div></div>
+     <div class="hud"><span class="chip" id="stChip">idle</span><span class="chip" id="latChip">—</span></div><div class="scan-line" id="sl" style="display:none"></div></div>
+   <div class="row mt">
+     <button class="btn primary" id="startBtn">__cam__ Start camera</button><button class="btn danger" id="stopBtn" disabled>Stop</button>
+     <button class="btn" id="snapBtn" disabled title="Saves a JPEG + the analysis to the Dashboard gallery">__save__ Save snapshot</button>
+     <label class="switch"><input type="checkbox" id="swMesh" checked><i></i>Face mesh</label>
+     <label class="switch"><input type="checkbox" id="swTess"><i></i>Full tessellation</label>
+   </div>
+   <p class="muted" id="status">Landmarker: not loaded</p>
+  </div>
+  <div class="col">
+   <div class="card"><div class="eyebrow">Dominant expression</div>
+     <div class="row" style="gap:20px"><div class="big-emoji" id="emo">🙂</div><div><h2 id="emoLabel" style="margin:0;font-size:28px">—</h2><span class="muted" id="emoConf">waiting for a face…</span></div></div>
+     <div class="hr"></div><div id="bars"></div>
+     <p class="muted" style="margin:10px 0 0"><small>Reads the <b>visible facial configuration</b>, not feelings. A serious neutral face is often scored as “anger”.</small></p></div>
+   <div class="card"><div class="eyebrow">Last 60 readings</div><div class="canvas-box" style="height:210px"><canvas id="chart"></canvas></div></div>
+  </div>
+ </div>
+</div>
+
+<div class="pane mt" id="pUp">
+ <div class="card"><div class="grid g2"><div><label>Photo (JPG / PNG / WebP, max 10 MB)</label><input type="file" id="file" accept="image/*"></div>
+  <div class="col"><label class="switch"><input type="checkbox" id="swTiles" checked><i></i>Group-photo mode (tiled face search, finds small faces)</label>
+  <div class="row"><button class="btn primary" id="anBtn">Analyse photo</button><span id="anSt" class="muted"></span></div></div></div></div>
+ <div class="grid g-main mt"><div class="card"><canvas id="upCanvas" style="width:100%;border-radius:12px;display:none"></canvas><div class="muted" id="upHint">Choose a photo to analyse.</div></div>
+  <div class="card"><h2>Faces</h2><div id="faceList" class="col"><span class="muted">No results yet.</span></div></div></div>
+</div>
+
+<script src="/static/vendor/three.min.js"></script><script src="/static/vendor/chart.umd.js"></script><script src="/static/js/core.js"></script>
+<script>
+document.querySelectorAll('.btn').forEach(b=>b.innerHTML=b.innerHTML.replace(/__(\w+)__/,(_,n)=>svgi(n)));
+tabs(document.body);
+const KEYS=['Happiness','Neutral','Sadness','Anger','Surprise'];
+let chart=new Chart($('#chart'),{type:'line',data:{labels:[],datasets:KEYS.map((k,i)=>({label:EMO[k][2],data:[],borderColor:EMO[k][1],backgroundColor:EMO[k][1]+'22',tension:.35,pointRadius:0,borderWidth:2}))},options:{maintainAspectRatio:false,scales:{y:{min:0,max:1,ticks:{callback:v=>v*100+'%'}},x:{display:false}},plugins:{legend:{position:'bottom'}}}});
+document.addEventListener('caps',e=>installBanner($('#banner'),e.detail,['expression']));
+let lastExp=null;
+const rig=new VisionRig({video:$('#v'),ov:$('#ov'),modules:['expression'],intervalMs:450,session:'expr-'+Math.random().toString(36).slice(2,10),
+  onStatus:s=>{$('#status').textContent=s},
+  onResult:(res)=>{
+    $('#latChip').textContent=res.total_ms+' ms · '+(rig.latency|0)+' ms round-trip';
+    const f=res.faces[0]; if(!f||!f.expression){$('#emoLabel').textContent='No face';$('#emoConf').textContent='move into view';return}
+    const e=f.expression; lastExp=e; $('#emo').textContent=EMO[e.label][0]; $('#emoLabel').textContent=EMO[e.label][2]; $('#emoLabel').style.color=EMO[e.label][1];
+    $('#emoConf').textContent=Math.round(e.confidence*100)+'% confidence · '+res.faces_count+' face'+(res.faces_count>1?'s':'');
+    renderBars($('#bars'),e.probs,{colors:true});
+    chart.data.labels.push(''); KEYS.forEach((k,i)=>chart.data.datasets[i].data.push(e.probs[k]));
+    if(chart.data.labels.length>60){chart.data.labels.shift();chart.data.datasets.forEach(d=>d.data.shift())} chart.update('none');
+  }});
+$('#swMesh').onchange=e=>rig.draw.mesh=e.target.checked; $('#swTess').onchange=e=>rig.draw.tess=e.target.checked;
+$('#startBtn').onclick=async()=>{try{$('#startBtn').disabled=true;await rig.start();$('#ph').style.display='none';$('#sl').style.display='';$('#stopBtn').disabled=false;$('#snapBtn').disabled=false;$('#stChip').textContent='● live';$('#stChip').className='chip ok'}catch(e){$('#startBtn').disabled=false;toast('Camera error: '+e.message,'bad')}};
+$('#stopBtn').onclick=()=>{rig.stop();$('#ph').style.display='';$('#sl').style.display='none';$('#startBtn').disabled=false;$('#stopBtn').disabled=true;$('#snapBtn').disabled=true;$('#stChip').textContent='idle';$('#stChip').className='chip'};
+$('#snapBtn').onclick=async()=>{try{const r=await rig.snapshot({caption:'Expression: '+(lastExp?EMO[lastExp.label][2]:'—'),analysis:{expression:lastExp}});toast('Snapshot saved to the Dashboard gallery','ok')}catch(e){toast(e.message,'bad')}};
+
+/* upload */
+$('#anBtn').onclick=async()=>{
+  const f=$('#file').files[0]; if(!f){toast('Choose a photo first','bad');return}
+  try{$('#anSt').innerHTML='<span class="spinner"></span> analysing…';
+    const res=await postImage('/api/vision/analyze',f,{modules:'expression',tiles:$('#swTiles').checked});
+    const img=await fileToImage(f),c=$('#upCanvas');c.width=img.naturalWidth;c.height=img.naturalHeight;c.style.display='block';$('#upHint').style.display='none';
+    const g=c.getContext('2d');g.drawImage(img,0,0);drawResult(g,res,c.width,c.height,{mirror:false,phones:false});
+    $('#faceList').innerHTML=res.faces.length?res.faces.map((fc,i)=>{const e=fc.expression;return e?`<div class="card flat" style="padding:12px"><div class="row spread"><b>Face ${i+1}</b><span>${EMO[e.label][0]} ${EMO[e.label][2]} · ${Math.round(e.confidence*100)}%</span></div><div id="fb${i}" style="margin-top:8px"></div></div>`:''}).join(''):'<span class="muted">No face found.</span>';
+    res.faces.forEach((fc,i)=>fc.expression&&renderBars($('#fb'+i),fc.expression.probs,{colors:true}));
+    $('#anSt').textContent=res.faces_count+' face(s) · '+res.total_ms+' ms'; if(res.unavailable.length)installBanner($('#banner'),{expression:false},['expression']);
+  }catch(e){$('#anSt').textContent='';toast(e.message,'bad')}
+};
+</script></body></html>

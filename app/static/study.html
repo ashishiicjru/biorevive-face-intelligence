@@ -1,0 +1,108 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Study Focus · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Study Focus Monitor" data-sub="Attention proxy from head pose · eyes · gaze · expression · phone use">
+<div id="banner"></div>
+<div class="note info mb"><b>How to read this.</b> The score is a transparent, rule-based <b>proxy</b> built from visible cues (not a validated measure of learning or attention). People concentrate while looking away, think with eyes closed and keep neutral faces. Use it for <b>self-tracking only</b> — never to grade or monitor other people.</div>
+<div class="grid g-main">
+ <div>
+  <div class="stage"><video id="v" playsinline muted></video><canvas class="ov" id="ov"></canvas>
+   <div class="ph" id="ph"><div><div style="font-size:42px">🎓</div><b>Ready when you are</b><br><small>Sit facing the screen with your face well lit, then press “Start session”.</small></div></div>
+   <div class="hud"><span class="chip" id="stChip">idle</span><span class="chip" id="timeChip">00:00</span><span class="chip" id="poseChip">pose —</span></div>
+   <div class="alert warn" id="alert">⚠ <span id="alertTxt">Eyes back on your work</span></div></div>
+  <div class="row mt"><button class="btn primary" id="startBtn">__cam__ Start session</button><button class="btn danger" id="endBtn" disabled>__stop__ End &amp; report</button>
+   <label class="switch"><input type="checkbox" id="swBeep" checked><i></i>Alert sound</label><label class="switch"><input type="checkbox" id="swVoice"><i></i>Voice prompt</label><label class="switch"><input type="checkbox" id="swMesh" checked><i></i>Mesh</label></div>
+  <div class="grid g3 mt">
+   <div class="card flat"><label>Alert me after being distracted for</label><select id="alertAfter"><option value="5">5 seconds</option><option value="10" selected>10 seconds</option><option value="20">20 seconds</option><option value="0">never</option></select></div>
+   <div class="card flat"><label>Phone detection</label><select id="phoneMode"><option value="0">Off</option><option value="416" selected>Fast (416)</option><option value="608">Balanced (608)</option></select></div>
+   <div class="card flat"><label>Pomodoro timer</label><select id="pomo"><option value="0" selected>Off</option><option value="25">25 min focus / 5 min break</option><option value="50">50 min focus / 10 min break</option><option value="1">1 min demo / 20 s break</option></select></div>
+  </div>
+  <p class="muted" id="status"></p>
+  <div class="card mt"><div class="row spread"><div class="eyebrow" style="margin:0">Attention timeline</div><span class="chip" id="pomoChip" style="display:none"></span></div><div class="canvas-box" style="height:230px"><canvas id="chart"></canvas></div></div>
+ </div>
+ <div class="col">
+  <div class="card" style="text-align:center"><div class="eyebrow">Attention proxy</div><div class="gauge" id="gauge"></div><div class="mt"><span class="state-pill s-Away" id="pill">Not started</span></div><p class="muted" id="notes" style="margin:10px 0 0"></p></div>
+  <div class="card"><div class="eyebrow">Signal breakdown</div><div id="comp" class="bars"><span class="muted">Start a session to see signals.</span></div></div>
+  <div class="grid g2"><div class="kpi"><b id="cBlink">—</b><span>blinks / min</span></div><div class="kpi"><b id="cYawn">0</b><span>yawns</span></div><div class="kpi"><b id="cPhone">0s</b><span>phone in view</span></div><div class="kpi"><b id="cDist">0</b><span>distraction events</span></div></div>
+  <div class="three-wrap" style="height:250px"><canvas class="three" id="avatar"></canvas><div class="tag">Live 3D head mesh (drag to rotate)</div></div>
+  <div class="card"><div class="row"><div class="big-emoji" id="emo" style="font-size:44px">🙂</div><div><b id="emoL">—</b><br><span class="muted" id="emoC">expression</span></div></div></div>
+ </div>
+</div>
+
+<script src="/static/vendor/three.min.js"></script><script src="/static/vendor/chart.umd.js"></script><script src="/static/js/core.js"></script><script src="/static/js/holo.js"></script>
+<script>
+document.querySelectorAll('.btn').forEach(b=>b.innerHTML=b.innerHTML.replace(/__(\w+)__/,(_,n)=>svgi(n)));
+document.addEventListener('caps',e=>installBanner($('#banner'),e.detail,['expression']));
+renderGauge($('#gauge'),null);
+const chart=new Chart($('#chart'),{type:'line',data:{labels:[],datasets:[{label:'Attention proxy',data:[],borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,.13)',fill:true,tension:.35,pointRadius:0,borderWidth:2}]},options:{maintainAspectRatio:false,scales:{y:{min:0,max:100},x:{ticks:{maxTicksLimit:8}}},plugins:{legend:{display:false}}}});
+let rig=null,avatar=null,sid=null,t0=0,timer=null,lastSummary=null,distSince=null,lastAlert=0,pomoT=null,phase='focus',phaseEnd=0;
+const BAD=['Distracted','Phone in use','Away','Drowsy'];
+const comps={head:'Head direction',eyes:'Eyes open',gaze:'Gaze on screen',expression:'Expression'};
+loadConnections().then(c=>{avatar=Holo.cloud($('#avatar'),c)});
+function mmss(s){s=Math.max(0,Math.floor(s));return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function say(t){if($('#swVoice').checked&&'speechSynthesis' in window){speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(t))}}
+
+function onResult(res,lm){
+  const en=res.engagement,f=res.faces[0],v=rig.video;
+  if(avatar)avatar.update(lm,v.videoWidth,v.videoHeight);
+  if(res.pose&&res.pose.pose){const p=res.pose.pose;$('#poseChip').textContent=`yaw ${p.yaw|0}° pitch ${p.pitch|0}°`}else $('#poseChip').textContent='pose n/a';
+  if(f&&f.expression){const e=f.expression;$('#emo').textContent=EMO[e.label][0];$('#emoL').textContent=EMO[e.label][2];$('#emoC').textContent=Math.round(e.confidence*100)+'% · expression only'}
+  if(!en)return;
+  renderGauge($('#gauge'),en.score,stateColor(en.state));
+  const pill=$('#pill');pill.textContent=en.state;pill.className='state-pill '+stateClass(en.state);
+  $('#notes').textContent=(en.notes||[]).join(' ');
+  const c=en.components||{};$('#comp').innerHTML=Object.keys(comps).filter(k=>k in c).map(k=>`<div class="bar"><span>${comps[k]}</span><div class="t"><i style="width:${c[k]*100}%"></i></div><span>${Math.round(c[k]*100)}%</span></div>`).join('')||'<span class="muted">Limited mode: no landmarks, only presence + expression are available.</span>';
+  $('#cBlink').textContent=en.blinks_per_min;$('#cYawn').textContent=en.yawns;
+  chart.data.labels.push(mmss((performance.now()-t0)/1000));chart.data.datasets[0].data.push(en.score);
+  if(chart.data.labels.length>240){chart.data.labels.shift();chart.data.datasets[0].data.shift()}chart.update('none');
+  $('#stChip').textContent='● '+en.state;$('#stChip').className='chip '+(en.state==='Focused'?'ok':BAD.includes(en.state)?'bad':'warn');
+  // alerts
+  const after=+$('#alertAfter').value,now=performance.now();
+  if(BAD.includes(en.state)&&phase==='focus'){distSince??=now;
+    if(after&&now-distSince>after*1000&&now-lastAlert>after*1000){lastAlert=now;const msg=en.state==='Phone in use'?'Phone detected — put it away':en.state==='Drowsy'?'You look tired — consider a short break':en.state==='Away'?'Face not visible':'Eyes back on your work';
+      $('#alertTxt').textContent=msg;$('#alert').classList.add('on');if($('#swBeep').checked)beep(660,220);say(msg)}}
+  else{distSince=null;$('#alert').classList.remove('on')}
+  fetch('/api/study/'+sid+'/summary').then(r=>r.json()).then(s=>{$('#cPhone').textContent=Math.round(s.phone_seconds)+'s';$('#cDist').textContent=s.distraction_events}).catch(()=>{});
+}
+function tick(){
+  $('#timeChip').textContent=mmss((performance.now()-t0)/1000);
+  const pm=+$('#pomo').value;
+  if(pm){const now=performance.now();if(!phaseEnd)phaseEnd=now+(pm===1?60:pm*60)*1000;
+    const left=(phaseEnd-now)/1000;$('#pomoChip').style.display='';$('#pomoChip').textContent=(phase==='focus'?'🍅 focus ':'☕ break ')+mmss(left);
+    if(left<=0){phase=phase==='focus'?'break':'focus';const len=phase==='focus'?(pm===1?60:pm*60):(pm===1?20:pm===25?300:600);phaseEnd=now+len*1000;rig.paused=phase==='break';beep(phase==='break'?523:784,300);toast(phase==='break'?'Break time — scoring paused':'Back to focus — scoring resumed','ok');say(phase==='break'?'Time for a break':'Back to focus')}}
+  else{$('#pomoChip').style.display='none'}
+}
+$('#startBtn').onclick=async()=>{
+  try{
+    sid='study-'+Math.random().toString(36).slice(2,12);
+    rig=new VisionRig({video:$('#v'),ov:$('#ov'),modules:['expression','engagement'],intervalMs:900,session:sid,onResult,onStatus:s=>$('#status').textContent=s,draw:{labels:false}});
+    const pm=+$('#phoneMode').value;if(pm){rig.modules.push('phone');rig.phoneSize=pm}
+    $('#startBtn').disabled=true;await rig.start();rig.draw.mesh=$('#swMesh').checked;
+    $('#ph').style.display='none';$('#endBtn').disabled=false;t0=performance.now();phase='focus';phaseEnd=0;chart.data.labels=[];chart.data.datasets[0].data=[];distSince=null;
+    timer=setInterval(tick,500);if(avatar)avatar.setAuto(false);
+  }catch(e){$('#startBtn').disabled=false;toast('Camera error: '+e.message,'bad')}
+};
+$('#swMesh').onchange=e=>{if(rig)rig.draw.mesh=e.target.checked};
+$('#endBtn').onclick=async()=>{
+  clearInterval(timer);rig.stop();$('#ph').style.display='';$('#endBtn').disabled=true;$('#startBtn').disabled=false;$('#alert').classList.remove('on');$('#stChip').textContent='ended';$('#stChip').className='chip';if(avatar){avatar.update(null);avatar.setAuto(true)}
+  try{const s=await api('/api/study/'+sid+'/end?save=true',{method:'POST'});lastSummary=s;showReport(s)}catch(e){toast('No data recorded for this session ('+e.message+')','bad')}
+};
+function showReport(s){
+  const sp=s.state_percent,fo=sp['Focused']||0,mm=x=>Math.floor(x/60)+'m '+Math.round(x%60)+'s';
+  const tips=[];
+  tips.push(`You were in the <b>Focused</b> state for <b>${fo.toFixed(0)}%</b> of ${mm(s.duration_s)}; longest unbroken streak <b>${mm(s.longest_focus_streak_s)}</b>.`);
+  if(s.phone_seconds>3)tips.push(`A phone was in view for <b>${Math.round(s.phone_seconds)} s</b>. Putting it in another room is the simplest fix.`);
+  if((sp['Drowsy']||0)>8||s.yawns>=3)tips.push('Several visible tiredness cues (long eye closures / yawns). A short break, water or light might help. These are visual cues only, not a health assessment.');
+  if(s.distraction_events>5)tips.push(`${s.distraction_events} distraction events — shorter focus blocks (e.g. 25 min) could help.`);
+  if(fo>=75)tips.push('Strong session by this proxy. Keep the same set-up.');
+  modal(`<div class="row spread"><h2>Session report</h2><button class="btn sm" onclick="$('#modalBg').classList.remove('on')">Close</button></div>
+   <div class="grid g4 mt"><div class="kpi"><b>${Math.round(s.average_attention_score)}</b><span>average attention proxy</span></div><div class="kpi"><b>${mm(s.duration_s)}</b><span>duration</span></div><div class="kpi"><b>${s.distraction_events}</b><span>distraction events</span></div><div class="kpi"><b>${Math.round(s.phone_seconds)}s</b><span>phone in view</span></div></div>
+   <div class="grid g2 mt"><div class="card flat"><div class="eyebrow">Time in each state</div><div class="canvas-box" style="height:230px"><canvas id="rDon"></canvas></div></div><div class="card flat"><div class="eyebrow">Attention timeline</div><div class="canvas-box" style="height:230px"><canvas id="rLine"></canvas></div></div></div>
+   <div class="card flat mt"><div class="eyebrow">Insights</div><ul>${tips.map(t=>'<li>'+t+'</li>').join('')}</ul><div class="note">${esc(s.disclaimer)} Session saved to the Dashboard.</div></div>
+   <div class="row mt"><button class="btn" id="dJson">Download JSON</button><button class="btn" id="dCsv">Download CSV</button></div>`);
+  const st=Object.entries(sp).filter(([k,v])=>v>0);
+  new Chart($('#rDon'),{type:'doughnut',data:{labels:st.map(x=>x[0]),datasets:[{data:st.map(x=>x[1]),backgroundColor:st.map(x=>stateColor(x[0])),borderWidth:0}]},options:{maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'right'}}}});
+  new Chart($('#rLine'),{type:'line',data:{labels:s.timeline.map(x=>mmss(x[0])),datasets:[{data:s.timeline.map(x=>x[1]),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,.13)',fill:true,tension:.3,pointRadius:2}]},options:{maintainAspectRatio:false,scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}});
+  $('#dJson').onclick=()=>downloadText('study-session.json',JSON.stringify(s,null,2),'application/json');
+  $('#dCsv').onclick=()=>downloadText('study-session.csv','seconds,score,state\n'+s.timeline.map(x=>x.join(',')).join('\n'),'text/csv');
+}
+</script></body></html>

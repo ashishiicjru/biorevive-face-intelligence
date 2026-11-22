@@ -1,0 +1,13 @@
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+sqlmodel>=0.0.22
+python-multipart>=0.0.9
+pydantic>=2.8
+reportlab>=4.2
+pillow>=10.4
+numpy>=1.26
+# GUI build of OpenCV (the command-line programs open camera windows). Must be 4.x:
+# OpenCV 5 removed the Caffe importer used by the age / gender / face-detector networks.
+# Server-only / Linux container? use opencv-python-headless>=4.10,<5 instead.
+opencv-python-headless>=4.10,<5
+python-dotenv>=1.0

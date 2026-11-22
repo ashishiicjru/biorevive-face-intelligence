@@ -1,0 +1,5 @@
+-r requirements.txt
+# optional extras
+mediapipe>=0.10          # full mode (head pose, eye-aspect ratio, gaze) for programs/study_focus_monitor.py
+pytest>=8
+httpx>=0.27

@@ -1,0 +1,55 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>About &amp; Remarks · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="About &amp; Remarks" data-sub="Purpose, limits, privacy, model cards and responsible use">
+
+<div class="card" style="border-color:rgba(251,191,36,.45)"><div class="eyebrow" style="color:var(--amber)">Remarks — please read</div>
+ <h2>This is a research / education prototype — not a medical device</h2>
+ <ul>
+  <li><b>No medical use.</b> Nothing here diagnoses, screens for, monitors, treats or predicts any disease, mental-health condition, fatigue disorder, attention disorder or skin condition. Do not use it to make health decisions.</li>
+  <li><b>Phenotypic Age</b> is a published research equation (Levine et al., 2018) on nine routine blood markers. It is an estimate, not a diagnosis; discuss real blood results with a qualified clinician.</li>
+  <li><b>Expressions are not feelings.</b> The model reads the visible shape of a face. People express emotion differently, many neutral or concentrating faces are misread as “anger” or “contempt”, and a smile does not mean someone is happy.</li>
+  <li><b>The study-focus score is a heuristic.</b> It is rule-based from head direction, eyes, gaze, expression and phone presence. It is not trained on learning outcomes and is not a validated measure of attention, effort or learning.</li>
+  <li><b>Age and gender are guesses from appearance</b> by small, older networks. They are approximate, can be biased across age, skin tone, gender presentation, makeup, glasses and image quality. The gender output is binary and cannot reflect gender identity — it is off by default and should never decide anything about a person.</li>
+  <li><b>Skin texture / tone numbers are image statistics</b> that change with lighting, camera, compression and makeup. They are not a dermatological assessment, not a Fitzpatrick type, and never used to infer ethnicity, identity or health.</li>
+ </ul></div>
+
+<div class="grid g2 mt">
+ <div class="card"><h2>Privacy &amp; data handling</h2><ul>
+  <li>Inference runs on <b>your own computer</b>. No cloud AI services are called.</li>
+  <li>Live frames are processed in memory and <b>discarded</b>. Nothing is stored unless you press <i>Save snapshot</i>.</li>
+  <li>Snapshots are JPEGs re-encoded without metadata in <code>data/snapshots</code>; you can delete each one from the Dashboard.</li>
+  <li>Study sessions store only a summary (state percentages, counts, timeline) in the local SQLite database.</li>
+  <li>Camera access needs <code>localhost</code> or HTTPS. If you expose the app on a network, add authentication first — it has none.</li>
+  <li>Download-time network use: model files are fetched once from their public sources (GitHub) and verified by SHA-256. The optional MediaPipe landmarker file comes from Google’s public model bucket unless you install it locally.</li></ul></div>
+ <div class="card"><h2>Responsible use</h2><ul>
+  <li>Use it on <b>yourself</b> or with the <b>informed consent</b> of everyone in view.</li>
+  <li>Do <b>not</b> use it to grade, rank, discipline, hire, monitor employees or students, or surveil anyone.</li>
+  <li>Biometric and face-analysis laws differ by country and region (for example GDPR in the EU and state biometric-privacy laws in the US). Check what applies to you before any real deployment, especially with children.</li>
+  <li>Verify the licences of the upstream models before commercial use (see table below).</li>
+  <li>Treat every output as a hint, show the uncertainty, and keep a human in the loop.</li></ul></div>
+</div>
+
+<div class="card mt"><h2>Model cards</h2><div style="overflow:auto"><table>
+ <tr><th>Model</th><th>Task</th><th>Trained on / source</th><th>Runtime</th><th>Known limits</th></tr>
+ <tr><td><b>SSD ResNet-10</b></td><td>Face detection</td><td>OpenCV sample model (opencv_3rdparty)</td><td>OpenCV DNN (Caffe)</td><td>300 px input: misses small faces unless tiled; frontal bias</td></tr>
+ <tr><td><b>MediaPipe FaceLandmarker</b></td><td>478 3D landmarks, blendshapes</td><td>Google MediaPipe</td><td>Browser (WASM / WebGL)</td><td>Needs a visible, reasonably frontal face; one face</td></tr>
+ <tr><td><b>EfficientNet-B0 (EmotiEffLib)</b></td><td>8-class expression</td><td>AffectNet (research / non-commercial dataset terms — verify before commercial use)</td><td>OpenCV DNN (ONNX)</td><td>Posed-vs-spontaneous gap, neutral faces read as anger/contempt, cultural variation</td></tr>
+ <tr><td><b>YOLOv4-tiny</b></td><td>Object detection incl. “cell phone”</td><td>MS COCO (darknet project weights)</td><td>OpenCV DNN (Darknet)</td><td>Small / angled / partly hidden phones are missed; “remote” look-alikes; larger input size = slower</td></tr>
+ <tr><td><b>Levi–Hassner age CNN</b></td><td>8 age groups</td><td>Adience benchmark photos</td><td>OpenCV DNN (Caffe)</td><td>Coarse groups, error of several years, demographic bias possible</td></tr>
+ <tr><td><b>Levi–Hassner gender CNN</b></td><td>Binary appearance guess (opt-in)</td><td>Adience benchmark photos</td><td>OpenCV DNN (Caffe)</td><td>Error-prone, binary, not identity; misjudged a test photo of a woman</td></tr>
+ <tr><td><b>Texture analysis</b></td><td>LBP, Gabor, edge density, ITA</td><td>Classical CV — no training data</td><td>NumPy / OpenCV</td><td>Descriptive statistics; lighting- and camera-dependent</td></tr>
+ <tr><td><b>Texture-feature models</b></td><td>Age (ridge) / gender (logistic)</td><td>Whatever labelled faces you train on</td><td>NumPy</td><td>Much weaker than CNNs; reports held-out error next to a baseline</td></tr>
+</table></div></div>
+
+<div class="grid g2 mt">
+ <div class="card"><h2>How the attention proxy works</h2>
+  <p class="muted">Every frame yields visible cues; a short rule set turns them into a state:</p>
+  <ul><li><b>Head direction</b> (solvePnP on 6 landmarks) gates the score: turned &gt;~25° or looking down sharply caps it low.</li>
+   <li><b>Eyes</b> (eye-aspect ratio) → blinks, eye closure, PERCLOS-style drowsiness cue.</li><li><b>Gaze</b> (iris position) when iris landmarks exist.</li>
+   <li><b>Expression</b> contributes only a small weight (negative affect lowers it slightly).</li><li><b>Phone in view</b> for &gt;1.5 s multiplies the score by 0.35 and sets “Phone in use”.</li>
+   <li>No face for 3 s → “Away”. Without landmarks the app runs in <i>limited mode</i> and cannot report “Focused”.</li></ul></div>
+ <div class="card"><h2>Technology</h2><div class="row"><span class="chip info">FastAPI</span><span class="chip info">SQLModel · SQLite</span><span class="chip info">OpenCV DNN</span><span class="chip info">NumPy</span><span class="chip info">MediaPipe Tasks</span><span class="chip info">Three.js</span><span class="chip info">Chart.js</span><span class="chip info">ReportLab PDF</span></div>
+  <p class="muted mt">Standalone command-line programs for each feature live in <code>programs/</code>: expression detector, phone detector, study-focus monitor, gender detector, age &amp; texture analyser, texture-model trainer.</p>
+  <h3 class="mt">Roadmap ideas</h3><ul class="muted"><li>Blendshape-based micro-expression cues (smile, brow, jaw)</li><li>Per-user calibration of attention thresholds</li><li>Speech / posture cues, multi-camera, WebRTC remote analysis</li><li>Fairness evaluation on a balanced dataset, calibrated uncertainty</li><li>Encrypted local storage and user accounts</li></ul></div>
+</div>
+<script src="/static/js/core.js"></script></body></html>

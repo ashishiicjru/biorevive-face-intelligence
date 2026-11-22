@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: biorevive-face-intelligence
+    runtime: python
+    buildCommand: pip install -r requirements-render.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MODEL_DIR
+        value: ./models
+      - key: PRELOAD_MODELS
+        value: "0"
+      - key: AGE_BACKEND
+        value: auto
