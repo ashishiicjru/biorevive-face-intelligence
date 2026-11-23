@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phone Detector · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Phone Detector" data-sub="Mobile-phone detection · YOLOv4-tiny (COCO) via OpenCV DNN">
+<div id="banner"></div>
+<div class="tabs" id="tabs"><button class="on" data-pane="pLive">Live camera</button><button data-pane="pUp">Photo upload</button></div>
+
+<div class="pane on mt" id="pLive"><div class="grid g-main">
+ <div>
+  <div class="stage"><video id="v" playsinline muted></video><canvas class="ov" id="ov"></canvas>
+   <div class="ph" id="ph"><div><div style="font-size:42px">📱</div><b>Camera is off</b><br><small>Hold a phone in view to test detection.</small></div></div>
+   <div class="hud"><span class="chip" id="stChip">idle</span><span class="chip" id="latChip">—</span></div>
+   <div class="alert bad" id="alert">📱 Mobile phone detected <span id="alertConf" style="margin-left:auto"></span></div></div>
+  <div class="row mt"><button class="btn primary" id="startBtn">__cam__ Start camera</button><button class="btn danger" id="stopBtn" disabled>Stop</button>
+   <label class="switch"><input type="checkbox" id="swBeep" checked><i></i>Alert sound</label><label class="switch"><input type="checkbox" id="swAll"><i></i>Show all objects</label></div>
+  <p class="muted" id="status"></p>
+ </div>
+ <div class="col">
+  <div class="card"><div class="eyebrow">Live status</div><div class="row spread"><div><h2 id="phState" style="margin:0;font-size:28px">No phone</h2><span class="muted" id="phSub">waiting…</span></div><div class="big-emoji" id="phEmoji">✅</div></div>
+   <div class="grid g3 mt"><div class="kpi"><b id="cEvents">0</b><span>detections</span></div><div class="kpi"><b id="cSecs">0</b><span>seconds with phone</span></div><div class="kpi"><b id="cMax">—</b><span>best confidence</span></div></div></div>
+  <div class="card"><div class="eyebrow">Settings</div>
+   <label>Sensitivity — minimum confidence (alert needs 2 frames in a row): <b id="confV">40%</b></label><input type="range" id="conf" min="10" max="80" value="40">
+   <label class="mt">Detector input size (bigger finds smaller phones, but is slower)</label>
+   <select id="size"><option value="416">416 — fastest</option><option value="608" selected>608 — balanced</option><option value="832">832 — small phones</option><option value="1024">1024 — max range, slowest</option></select>
+   <p class="muted mt"><small>COCO “remote” is a common look-alike and is shown in amber as a possible phone.</small></p></div>
+  <div class="card"><div class="eyebrow">Detection log</div><div style="max-height:200px;overflow:auto"><table id="log"><tr><td class="muted">No detections yet.</td></tr></table></div></div>
+ </div></div></div>
+
+<div class="pane mt" id="pUp">
+ <div class="card"><div class="grid g3"><div><label>Photo</label><input type="file" id="file" accept="image/*"></div>
+  <div><label>Min confidence: <b id="uConfV">35%</b></label><input type="range" id="uConf" min="10" max="80" value="35"><label class="mt">Input size</label><select id="uSize"><option>608</option><option>832</option><option selected>1024</option></select></div>
+  <div class="col"><label class="switch"><input type="checkbox" id="uAll"><i></i>Show all objects</label><div class="row"><button class="btn primary" id="anBtn">Detect</button><span class="muted" id="anSt"></span></div></div></div></div>
+ <div class="grid g-main mt"><div class="card"><img id="outImg" style="width:100%;border-radius:12px;display:none"><div class="muted" id="upHint">Annotated result appears here.</div></div><div class="card"><h2>Detections</h2><div id="detList" class="muted">None yet.</div></div></div>
+</div>
+
+<script src="/static/vendor/three.min.js"></script><script src="/static/js/core.js"></script>
+<script>
+document.querySelectorAll('.btn').forEach(b=>b.innerHTML=b.innerHTML.replace(/__(\w+)__/,(_,n)=>svgi(n)));
+tabs(document.body);
+document.addEventListener('caps',e=>installBanner($('#banner'),e.detail,['phone']));
+let events=0,secs=0,best=0,wasPhone=false,lastT=null,lastBeep=0,streak=0;
+const rig=new VisionRig({video:$('#v'),ov:$('#ov'),modules:['phone'],intervalMs:550,useLandmarks:false,phoneSize:608,phoneConf:.4,draw:{faces:false,mesh:false},
+  onStatus:s=>$('#status').textContent=s,
+  onResult:(res)=>{
+    $('#latChip').textContent=res.total_ms+' ms';
+    const ph=res.phones.filter(p=>p.is_phone);streak=ph.length?streak+1:0;const on=streak>=2,now=performance.now(),top=ph.length?Math.max(...ph.map(p=>p.confidence)):0;   /* confirmed after 2 consecutive detections */
+    if(lastT!=null&&on)secs+=(now-lastT)/1000; lastT=now;
+    if(on&&!wasPhone){events++;const row=`<tr><td>${new Date().toLocaleTimeString()}</td><td>${Math.round(top*100)}%</td></tr>`;const t=$('#log');if(t.querySelector('.muted'))t.innerHTML='';t.insertAdjacentHTML('afterbegin',row)}
+    if(on&&$('#swBeep').checked&&now-lastBeep>2500){beep(920,180);lastBeep=now}
+    wasPhone=on;best=Math.max(best,top);
+    $('#alert').classList.toggle('on',on);$('#alertConf').textContent=on?Math.round(top*100)+'%':'';
+    $('#phState').textContent=on?'Phone detected':'No phone';$('#phState').style.color=on?'#fb7185':'#34d399';$('#phEmoji').textContent=on?'📱':'✅';
+    $('#phSub').textContent=on?ph.length+' phone'+(ph.length>1?'s':'')+' in view':(res.phones.length?'possible look-alike in view':'scene clear');
+    $('#cEvents').textContent=events;$('#cSecs').textContent=Math.round(secs);$('#cMax').textContent=best?Math.round(best*100)+'%':'—';
+  }});
+$('#conf').oninput=e=>{rig.phoneConf=e.target.value/100;$('#confV').textContent=e.target.value+'%'};
+$('#size').onchange=e=>rig.phoneSize=+e.target.value;
+$('#swAll').onchange=e=>{rig.allObjects=e.target.checked};
+$('#startBtn').onclick=async()=>{try{$('#startBtn').disabled=true;await rig.start();$('#ph').style.display='none';$('#stopBtn').disabled=false;$('#stChip').textContent='● live';$('#stChip').className='chip ok'}catch(e){$('#startBtn').disabled=false;toast('Camera error: '+e.message,'bad')}};
+$('#stopBtn').onclick=()=>{rig.stop();$('#ph').style.display='';$('#startBtn').disabled=false;$('#stopBtn').disabled=true;$('#alert').classList.remove('on');$('#stChip').textContent='idle';$('#stChip').className='chip'};
+$('#uConf').oninput=e=>$('#uConfV').textContent=e.target.value+'%';
+$('#anBtn').onclick=async()=>{const f=$('#file').files[0];if(!f){toast('Choose a photo first','bad');return}
+  try{$('#anSt').innerHTML='<span class="spinner"></span>';const r=await postImage('/api/vision/phone',f,{conf:$('#uConf').value/100,size:$('#uSize').value,all_objects:$('#uAll').checked,annotate:true});
+    $('#outImg').src=r.annotated;$('#outImg').style.display='block';$('#upHint').style.display='none';$('#anSt').textContent='';
+    $('#detList').innerHTML=r.detections.length?`<div class="chip ${r.phone_detected?'bad':'ok'}" style="margin-bottom:10px">${r.phone_detected?'📱 Phone detected':'No phone'}</div><table>`+r.detections.map(d=>`<tr><td>${esc(d.label)}</td><td>${Math.round(d.confidence*100)}%</td></tr>`).join('')+'</table><p class="muted"><small>'+esc(r.note)+'</small></p>':'<span class="muted">Nothing detected at this confidence.</span>';
+  }catch(e){$('#anSt').textContent='';toast(e.message,'bad')}};
+</script></body></html>

@@ -1,0 +1,46 @@
+
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://biorevive-face-intelligence.onrender.com/api/:path*"
+    },
+    {
+      "source": "/models/face_landmarker.task",
+      "destination": "https://biorevive-face-intelligence.onrender.com/models/face_landmarker.task"
+    },
+    {
+      "source": "/expression",
+      "destination": "/static/expression.html"
+    },
+    {
+      "source": "/phone",
+      "destination": "/static/phone.html"
+    },
+    {
+      "source": "/study",
+      "destination": "/static/study.html"
+    },
+    {
+      "source": "/attributes",
+      "destination": "/static/attributes.html"
+    },
+    {
+      "source": "/biosuite",
+      "destination": "/static/biosuite.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/static/dashboard.html"
+    },
+    {
+      "source": "/models",
+      "destination": "/static/models.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/static/about.html"
+    }
+  ]
+}

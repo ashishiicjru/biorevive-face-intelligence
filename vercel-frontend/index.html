@@ -1,0 +1,60 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bio-Revive 360 · Face Intelligence Suite</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Bio-Revive 360" data-sub="Computer-vision face intelligence suite">
+<section class="hero">
+  <div>
+    <div class="eyebrow">Computer-vision research prototype · v3</div>
+    <h1>See what your camera <span class="grad-text">can understand</span>.</h1>
+    <p class="lead">Real-time facial-expression analysis, mobile-phone detection, study-focus tracking, age &amp; skin-texture analysis and a 3D face-mesh viewer — running locally on your own machine, with transparent models and honest limits.</p>
+    <div class="row mt"><a class="btn primary" href="/study">Start a study session</a><a class="btn" href="/expression">Try the Expression Lab</a><a class="btn" href="/dashboard">Open dashboard</a></div>
+    <div class="row mt" id="capChips"><span class="chip">Loading capabilities…</span></div>
+  </div>
+  <div class="three-wrap" style="height:540px"><canvas class="three" id="heroCanvas"></canvas><div class="tag">Procedural 3D head · drag to rotate · scan line = live render</div></div>
+</section>
+
+<div class="grid g4 mt2" id="kpis">
+  <div class="kpi"><b id="k1">—</b><span>CV models installed</span></div>
+  <div class="kpi"><b id="k2">478</b><span>3D face landmarks per frame</span></div>
+  <div class="kpi"><b id="k3">8</b><span>expression classes (AffectNet)</span></div>
+  <div class="kpi"><b id="k4">80</b><span>object classes incl. “cell phone”</span></div>
+</div>
+
+<div class="mt2"><div class="eyebrow">Modules</div><h2>Everything in one suite</h2></div>
+<div class="grid g3 mt">
+  <a class="card feature tilt" href="/expression"><div class="ic">__smile__</div><h3>Expression Lab</h3><p>Happy, sad, angry, surprised… probabilities per face, smoothing over time, live camera or photo upload (group photos supported).</p></a>
+  <a class="card feature tilt" href="/phone"><div class="ic">__phone__</div><h3>Phone Detector</h3><p>YOLOv4-tiny finds mobile phones in live video or images, raises an alert and keeps a detection log. Tunable sensitivity &amp; input size.</p></a>
+  <a class="card feature tilt" href="/study"><div class="ic">__book__</div><h3>Study Focus</h3><p>Attention proxy from head pose, eye closure, gaze, expression and phone use — with timeline, blink/yawn counters and a session report.</p></a>
+  <a class="card feature tilt" href="/attributes"><div class="ic">__layers__</div><h3>Age · Gender · Texture</h3><p>Apparent age (CNN), optional gender guess, LBP/Gabor skin-texture maps, wrinkle-zone metrics and skin-tone (ITA) with a 3D relief view.</p></a>
+  <a class="card feature tilt" href="/biosuite"><div class="ic">__dna__</div><h3>Bio-Suite</h3><p>The original Bio-Revive tools: face scans, Phenotypic Age from nine blood biomarkers (Levine 2018), history and PDF report.</p></a>
+  <a class="card feature tilt" href="/dashboard"><div class="ic">__chart__</div><h3>Dashboard</h3><p>KPIs, focus timeline, expression mix, bio-age comparison, snapshot gallery and a 3D scene — all from your own sessions.</p></a>
+</div>
+
+<div class="mt2"><div class="eyebrow">Pipeline</div><h2>How a frame is analysed</h2></div>
+<div class="flow mt">
+  <div class="step"><b>Camera</b><small>Browser webcam, frames downscaled to 640 px</small></div>
+  <div class="step"><b>Landmarks</b><small>MediaPipe FaceLandmarker: 478 3D points, in the browser</small></div>
+  <div class="step"><b>Server models</b><small>Face detector · expression CNN · YOLO phone detector · age/texture</small></div>
+  <div class="step"><b>Fusion</b><small>Transparent rules: pose, eyes, gaze, expression, phone → attention state</small></div>
+  <div class="step"><b>Insights</b><small>Live UI, session report, dashboard</small></div>
+</div>
+
+<div class="mt2"><div class="eyebrow">3D gallery</div><h2>Rendered scenes</h2></div>
+<div class="gallery mt" id="renders"></div>
+
+<div class="grid g2 mt2">
+  <div class="card"><h2>Technology</h2><div class="row mt">
+    <span class="chip info">FastAPI</span><span class="chip info">OpenCV DNN</span><span class="chip info">ONNX · Caffe · Darknet</span><span class="chip info">MediaPipe FaceLandmarker</span><span class="chip info">Three.js 3D</span><span class="chip info">Chart.js</span><span class="chip info">SQLModel / SQLite</span><span class="chip info">NumPy texture models</span></div>
+    <p class="muted mt">All models are downloaded once, checksum-verified, and executed locally. No cloud inference, no accounts.</p></div>
+  <div class="card"><h2>Remarks</h2><div class="note">This is a <b>prototype for education and research</b>. It is <b>not a medical device</b> and does not diagnose, treat or screen for any condition. Expression, attention, age, gender and skin-texture outputs are statistical estimates from images and can be wrong — especially across different faces, lighting and cameras. Read the full <a href="/about">remarks &amp; limitations</a>.</div></div>
+</div>
+<script src="/static/vendor/three.min.js"></script><script src="/static/js/core.js"></script><script src="/static/js/holo.js"></script>
+<script>
+document.querySelectorAll('.feature .ic').forEach(e=>{const m=e.textContent.match(/__(\w+)__/);if(m)e.innerHTML=svgi(m[1])});
+Holo.head($('#heroCanvas'));
+(async()=>{
+  try{const o=await api('/api/models');const n=o.models.filter(m=>m.state==='installed').length;$('#k1').textContent=n+' / '+o.models.length;}catch(e){}
+  document.addEventListener('caps',e=>{const c=e.detail;$('#capChips').innerHTML=[['Expression',c.expression],['Phone detector',c.phone],['Age CNN',c.age],['Gender (opt-in)',c.gender],['Face detector: '+c.face_detector,true]].map(([k,v])=>`<span class="chip ${v?'ok':'warn'}">${v?'✓':'○'} ${k}</span>`).join('')});
+  if(window.CAPS)document.dispatchEvent(new CustomEvent('caps',{detail:window.CAPS}));
+  const r=$('#renders');for(let i=1;i<=6;i++){const im=new Image();im.src='/static/img/render_'+i+'.png';im.alt='3D render '+i;im.onload=()=>{const f=document.createElement('figure');f.appendChild(im);f.insertAdjacentHTML('beforeend','<figcaption><span>3D render '+i+'</span><span>Three.js</span></figcaption>');r.appendChild(f)}}
+})();
+</script></body></html>

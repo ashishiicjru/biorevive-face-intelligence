@@ -1,0 +1,82 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Age · Gender · Texture · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Age · Gender · Texture Lab" data-sub="Apparent age CNN · optional gender guess · skin texture (LBP / Gabor / edges) · skin tone (ITA) · 3D relief">
+<div id="banner"></div>
+<div class="grid g-main">
+ <div class="card"><div class="eyebrow">1 · Input</div>
+  <div class="grid g2"><div><label>Face photo (front-facing, well lit, one person)</label><input type="file" id="file" accept="image/*"><div class="row mt"><button class="btn" id="camBtn">__cam__ Use webcam</button><button class="btn" id="capBtn" style="display:none">Capture</button></div></div>
+   <div class="stage" id="camStage" style="display:none;aspect-ratio:4/3"><video id="v" playsinline muted></video></div>
+   <div id="prevWrap"><img id="prev" style="width:100%;max-height:230px;object-fit:contain;border-radius:12px;display:none"></div></div>
+  <div class="hr"></div>
+  <div class="row spread"><label class="switch"><input type="checkbox" id="swGender"><i></i>Include apparent-gender estimate (optional, off by default)</label><button class="btn primary" id="runBtn">Analyse face</button></div>
+  <div class="note bad mt" id="gNote" style="display:none"><b>About the gender estimate.</b> It is a binary guess from appearance by a small 2015 network trained on web photos. It is error-prone (it misjudged a test photo of a woman as male), cannot represent anyone's gender identity, and is less reliable for some groups. Never use it to make decisions about people.</div>
+  <div id="runSt" class="muted mt"></div></div>
+ <div class="card"><div class="eyebrow">Train your own texture models</div><p class="muted">The app can learn age / gender from <b>texture features only</b> (LBP, Gabor, edge density, skin colour) with a NumPy ridge / logistic model — you provide labelled faces such as UTKFace:</p>
+  <p><code>python programs/train_texture_model.py --task age --data path/to/UTKFace</code></p><p><code>python programs/train_texture_model.py --task gender --data path/to/UTKFace</code></p>
+  <div class="row"><span class="chip" id="tmAge">texture-age model: …</span><span class="chip" id="tmGen">texture-gender model: …</span></div>
+  <p class="muted mt"><small>Hand-crafted texture features are far weaker than the CNNs; the trainer reports held-out error next to a trivial baseline so you can see what it really learned.</small></p></div>
+</div>
+
+<div id="results" style="display:none" class="mt2">
+ <div class="tabs" id="tabs"><button class="on" data-pane="tOver">Overview</button><button data-pane="tAge">Age</button><button data-pane="tTex">Texture</button><button data-pane="tTone">Skin tone</button><button data-pane="tRel">3D relief</button><button data-pane="tGen" id="tGenBtn" style="display:none">Gender</button></div>
+ <div class="pane on mt" id="tOver"><div class="grid g-main"><div class="card"><div class="eyebrow">Detected face</div><img id="faceImg" style="width:100%;max-width:380px;border-radius:14px"></div><div class="grid g2" id="tiles" style="align-content:start"></div></div></div>
+ <div class="pane mt" id="tAge"><div class="grid g2"><div class="card"><div class="eyebrow">Apparent age (Levi–Hassner CNN, 10-crop)</div><h2 id="ageBig" style="font-size:40px"></h2><div class="canvas-box" style="height:250px"><canvas id="ageChart"></canvas></div></div><div class="card"><div class="eyebrow">Other estimators</div><div id="ageOther"></div><div class="note mt">The network classifies into 8 age groups; the number shown averages the winning group with its neighbours. Typical error is several years and varies with lighting, expression, makeup and appearance. No calibrated interval is available.</div></div></div></div>
+ <div class="pane mt" id="tTex"><div class="grid g4" id="texImgs"></div><div class="grid g2 mt"><div class="card"><div class="eyebrow">Regional metrics (skin pixels only)</div><table id="regTbl"></table></div><div class="card"><div class="eyebrow">LBP histogram &amp; Gabor energy</div><div class="canvas-box" style="height:130px"><canvas id="lbpChart"></canvas></div><div class="canvas-box" style="height:130px;margin-top:8px"><canvas id="gabChart"></canvas></div></div></div><div id="texWarn" class="mt"></div><div class="note mt">Descriptive image statistics only — <b>not</b> dermatology and not a validated age or health measure. Indices are relative; compare only photos taken with the same camera and lighting.</div></div>
+ <div class="pane mt" id="tTone"><div class="grid g2"><div class="card"><div class="eyebrow">Skin tone (median of skin pixels)</div><div class="row" style="gap:20px"><div class="swatch" id="sw" style="width:96px;height:96px"></div><div><h2 id="toneCat" style="margin:0"></h2><span class="muted" id="toneLab"></span></div></div>
+   <div class="mt"><label>Individual Typology Angle (ITA°)</label><div style="position:relative;height:16px;border-radius:99px;background:linear-gradient(90deg,#3b2417,#7a4a2a,#b57d4f,#dca77a,#f1cfae,#fbe6d2)"><div id="itaMark" style="position:absolute;top:-4px;width:4px;height:24px;background:#fff;border-radius:3px;box-shadow:0 0 8px #000"></div></div><div class="row spread"><small>dark</small><small>very light</small></div></div></div>
+  <div class="card"><div class="eyebrow">Read this first</div><div class="note">Measured colour depends on lighting, exposure and the camera's white balance, and the ITA bands are an approximate lab-colour convention. This is <b>not</b> a Fitzpatrick skin type, <b>not</b> a medical or racial classification, and is never used to guess identity, ethnicity or health.</div><div class="grid g3 mt"><div class="kpi"><b id="kEven">—</b><span>tone evenness</span></div><div class="kpi"><b id="kRed">—</b><span>redness (a*)</span></div><div class="kpi"><b id="kSmooth">—</b><span>smoothness idx</span></div></div></div></div></div>
+ <div class="pane mt" id="tRel"><div class="grid g-main"><div class="three-wrap" style="height:460px"><canvas class="three" id="relCanvas"></canvas><div class="tag">Brightness-as-height 3D relief of the face crop · drag to rotate</div></div><div class="card"><div class="eyebrow">Relief source</div><select id="relSrc"><option value="face">Face photo</option><option value="lbp">LBP texture map</option><option value="edge">Edge / fine-line map</option></select><label class="mt">Height</label><input type="range" id="relAmp" min="10" max="90" value="38"><p class="muted mt"><small>A visualisation: it turns pixel brightness into height so texture structure becomes visible in 3D. It is not a 3D scan of the face.</small></p></div></div></div>
+ <div class="pane mt" id="tGen"><div class="card"><div class="eyebrow">Apparent gender (optional)</div><div id="genBox"></div></div></div>
+</div>
+
+<script src="/static/vendor/three.min.js"></script><script src="/static/vendor/chart.umd.js"></script><script src="/static/js/core.js"></script><script src="/static/js/holo.js"></script>
+<script>
+document.querySelectorAll('.btn').forEach(b=>b.innerHTML=b.innerHTML.replace(/__(\w+)__/,(_,n)=>svgi(n)));
+tabs(document.body);
+document.addEventListener('caps',e=>{const c=e.detail;installBanner($('#banner'),c,['age']);$('#tmAge').textContent='texture-age model: '+(c.texture_age_model?'trained ✓':'not trained');$('#tmAge').className='chip '+(c.texture_age_model?'ok':'');$('#tmGen').textContent='texture-gender model: '+(c.texture_gender_model?'trained ✓':'not trained');$('#tmGen').className='chip '+(c.texture_gender_model?'ok':'')});
+$('#swGender').onchange=e=>$('#gNote').style.display=e.target.checked?'block':'none';
+let file=null,stream=null,rel=null,R=null,charts={};
+$('#file').onchange=e=>{file=e.target.files[0];if(file){$('#prev').src=URL.createObjectURL(file);$('#prev').style.display='block'}};
+$('#camBtn').onclick=async()=>{try{stream=await navigator.mediaDevices.getUserMedia({video:true});$('#v').srcObject=stream;await $('#v').play();$('#camStage').style.display='';$('#capBtn').style.display='';}catch(e){toast('Camera error: '+e.message,'bad')}};
+$('#capBtn').onclick=()=>{const v=$('#v'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);c.toBlob(b=>{file=new File([b],'webcam.jpg',{type:'image/jpeg'});$('#prev').src=URL.createObjectURL(b);$('#prev').style.display='block';stream.getTracks().forEach(t=>t.stop());$('#camStage').style.display='none';$('#capBtn').style.display='none'},'image/jpeg',.92)};
+function mk(id,cfg){charts[id]?.destroy();charts[id]=new Chart($('#'+id),cfg)}
+$('#runBtn').onclick=async()=>{
+  if(!file){toast('Choose or capture a photo first','bad');return}
+  try{$('#runSt').innerHTML='<span class="spinner"></span> analysing (first run loads models)…';$('#runBtn').disabled=true;
+    R=await postImage('/api/vision/texture',file,{include_gender:$('#swGender').checked});render(R);$('#runSt').textContent='Done.'}
+  catch(e){$('#runSt').textContent='';toast(e.message,'bad')}finally{$('#runBtn').disabled=false}
+};
+function render(R){
+  $('#results').style.display='';const T=R.texture,tone=T.skin_tone,img=T.images;
+  $('#faceImg').src=img.face;
+  const age=R.age_cnn;
+  $('#tiles').innerHTML=[
+    ['Apparent age',age?'~'+Math.round(age.apparent_age)+' y':'n/a',age?'group '+age.age_bucket+' · '+Math.round(age.bucket_probability*100)+'%':'install age model'],
+    ['Skin tone',tone?tone.ita_category:'n/a',tone?'ITA '+tone.ita_degrees+'°':''],
+    ['Smoothness index',fmt(T.smoothness_index),'relative, 0–100'],['Fine-line density',fmt(T.fine_line_density_index),'relative, 0–100'],
+    ['Skin coverage',fmt(T.skin_coverage_pct,0)+'%','of the face crop'],['LBP entropy',fmt(T.lbp.entropy_bits,2),'bits (texture variety)']
+  ].map(([a,b,c])=>`<div class="kpi"><span>${a}</span><b style="font-size:24px;margin-top:4px">${b}</b><span>${c}</span></div>`).join('');
+  if(age){$('#ageBig').innerHTML=`~${Math.round(age.apparent_age)} <small style="font-size:16px">years (apparent)</small>`;
+    mk('ageChart',{type:'bar',data:{labels:Object.keys(age.bucket_probabilities),datasets:[{data:Object.values(age.bucket_probabilities).map(v=>v*100),backgroundColor:Object.keys(age.bucket_probabilities).map(k=>k===age.age_bucket?'#22d3ee':'#4f8cff55'),borderRadius:6}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>v+'%'}}}}})}
+  let other='';
+  if(R.age_texture_model){const m=R.age_texture_model;other+=`<div class="kpi"><span>Texture-feature model</span><b>~${Math.round(m.age)} y</b><span>held-out MAE ${fmt(m.validation.mae_years)} y vs baseline ${fmt(m.validation.baseline_mae_years)} y (n=${m.validation.n_val})</span></div>`}
+  else other+='<p class="muted">No texture-feature age model trained yet (see “Train your own texture models”).</p>';
+  $('#ageOther').innerHTML=other;
+  $('#texImgs').innerHTML=[['Face (normalised)',img.face],['Skin mask + regions',img.skin_mask],['LBP texture map',img.lbp_map],['Edge / fine-line map',img.edge_map]].map(([t,u])=>`<div class="card flat" style="padding:10px"><img src="${u}" style="width:100%;border-radius:10px"><small>${t}</small></div>`).join('');
+  $('#regTbl').innerHTML='<tr><th>Region</th><th>Edge density</th><th>Roughness</th><th>Skin</th></tr>'+Object.entries(T.regions).map(([k,v])=>`<tr><td>${k.replace('_',' ')}</td><td>${(v.edge_density*100).toFixed(1)}%</td><td>${v.roughness}</td><td>${Math.round(v.skin_coverage*100)}%</td></tr>`).join('');
+  mk('lbpChart',{type:'bar',data:{labels:T.lbp.uniform_histogram.map((_,i)=>i===9?'other':'u'+i),datasets:[{data:T.lbp.uniform_histogram,backgroundColor:'#8b5cf6',borderRadius:4}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  mk('gabChart',{type:'bar',data:{labels:['λ6 0°','45°','90°','135°','λ12 0°','45°','90°','135°'],datasets:[{data:T.gabor.mean_energy,backgroundColor:'#22d3ee',borderRadius:4}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  $('#texWarn').innerHTML=(T.warnings||[]).map(w=>`<div class="note">${esc(w)}</div>`).join('');
+  if(tone){$('#sw').style.background=tone.swatch_hex;$('#toneCat').textContent=tone.ita_category+' · ITA '+tone.ita_degrees+'°';$('#toneLab').textContent=`L* ${tone.lab.L}  a* ${tone.lab.a}  b* ${tone.lab.b}  ·  ${tone.swatch_hex}`;
+    $('#itaMark').style.left=clamp((tone.ita_degrees+30)/110*100,0,98)+'%';$('#kEven').textContent=tone.evenness;$('#kRed').textContent=tone.redness_a}
+  $('#kSmooth').textContent=fmt(T.smoothness_index);
+  const gb=$('#tGenBtn');gb.style.display=(R.gender_cnn||R.gender_texture_model)?'':'none';
+  if(R.gender_cnn||R.gender_texture_model){let h='';if(R.gender_cnn){const g=R.gender_cnn;h+=`<h2 style="margin:0">${esc(g.label)}</h2><div class="muted">${Math.round(g.probability*100)}% model probability (Levi–Hassner CNN)</div><div id="gb1" class="mt"></div><div class="note bad mt">${esc(g.caveat)}</div>`}
+    if(R.gender_texture_model){const g=R.gender_texture_model;h+=`<hr class="hr"><b>Texture-feature model:</b> ${esc(g.label)} (${Math.round(g.probability*100)}%) — held-out accuracy ${(g.validation.accuracy*100).toFixed(0)}% vs ${(g.validation.baseline_accuracy*100).toFixed(0)}% majority baseline`}
+    $('#genBox').innerHTML=h;if(R.gender_cnn)renderBars($('#gb1'),R.gender_cnn.probs,{names:{'male-presenting':'Male-pres.','female-presenting':'Female-pres.'}})}
+  buildRelief();
+}
+function buildRelief(){const T=R.texture.images,src={face:T.face,lbp:T.lbp_map,edge:T.edge_map}[$('#relSrc').value];if(!rel)rel=Holo.relief($('#relCanvas'),src,{amp:$('#relAmp').value/100});else rel.setSrc(src)}
+$('#relSrc').onchange=buildRelief;$('#relAmp').oninput=e=>rel&&rel.setAmp(e.target.value/100);
+document.addEventListener('tab',e=>{if(e.detail==='tRel'&&R)setTimeout(buildRelief,50)});
+</script></body></html>

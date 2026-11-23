@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard · Bio-Revive 360</title><link rel="stylesheet" href="/static/css/app.css"></head>
+<body data-title="Dashboard" data-sub="Your sessions, snapshots and bio-age history — stored locally on this machine">
+<div class="grid g4" id="kpis"></div>
+<div class="grid g3 mt">
+ <div class="card"><div class="eyebrow">Attention by session</div><div class="canvas-box"><canvas id="cSess"></canvas></div><p class="muted" id="sessEmpty"></p></div>
+ <div class="card"><div class="eyebrow">Time in each state</div><div class="canvas-box"><canvas id="cState"></canvas></div></div>
+ <div class="card"><div class="eyebrow">Expression mix (study sessions)</div><div class="canvas-box"><canvas id="cEmo"></canvas></div></div>
+</div>
+<div class="grid g-main mt">
+ <div class="card"><div class="eyebrow">Phenotypic vs chronological age</div><div class="canvas-box" style="height:260px"><canvas id="cBio"></canvas></div><p class="muted" id="bioEmpty"></p></div>
+ <div class="three-wrap" style="height:330px"><canvas class="three" id="holo"></canvas><div class="tag">Interactive 3D head · drag to rotate</div></div>
+</div>
+<div class="card mt"><div class="row spread"><div><div class="eyebrow">Image dashboard</div><h2 style="margin:0">Saved snapshots</h2></div><span class="chip" id="snapCount"></span></div>
+ <p class="muted">Only frames you explicitly save appear here. They are JPEGs on this machine (<code>data/snapshots</code>); delete any time.</p><div class="gallery mt" id="gallery"></div></div>
+<div class="card mt"><div class="eyebrow">3D renders</div><div class="gallery" id="renders"></div></div>
+<div class="card mt"><div class="eyebrow">System</div><div id="sys" class="row"></div></div>
+<script src="/static/vendor/three.min.js"></script><script src="/static/vendor/chart.umd.js"></script><script src="/static/js/core.js"></script><script src="/static/js/holo.js"></script>
+<script>
+Holo.head($('#holo'),{color:0x34d399,color2:0x22d3ee});
+const mkc=(id,cfg)=>new Chart($('#'+id),cfg);
+async function load(){
+ const d=await api('/api/dashboard'),c=d.counts;
+ $('#kpis').innerHTML=[['Study sessions',c.study_sessions],['Study minutes',d.study.total_minutes],['Avg attention',d.study.average_score??'—'],['Snapshots',c.snapshots],['Profiles',c.users],['Face scans',c.scans],['Bio-age assessments',c.assessments],['Capabilities ready',Object.values(d.capabilities).filter(v=>v===true).length]].map(([k,v])=>`<div class="kpi"><b>${v}</b><span>${k}</span></div>`).join('');
+ const rs=d.study.recent;
+ mkc('cSess',{type:'line',data:{labels:rs.map(r=>new Date(r.t+'Z').toLocaleDateString(undefined,{month:'short',day:'numeric'})),datasets:[{label:'avg attention',data:rs.map(r=>r.score),borderColor:'#22d3ee',backgroundColor:'rgba(34,211,238,.15)',fill:true,tension:.35,pointRadius:3}]},options:{maintainAspectRatio:false,scales:{y:{min:0,max:100}},plugins:{legend:{display:false}}}});
+ $('#sessEmpty').textContent=rs.length?'':'No study sessions yet — run one on the Study Focus page.';
+ const sp=Object.entries(d.study.state_percent);
+ mkc('cState',{type:'doughnut',data:{labels:sp.map(x=>x[0]),datasets:[{data:sp.map(x=>x[1]),backgroundColor:sp.map(x=>stateColor(x[0])),borderWidth:0}]},options:{maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom'}}}});
+ const ep=Object.entries(d.study.expression_percent);
+ mkc('cEmo',{type:'doughnut',data:{labels:ep.map(x=>EMO[x[0]]?.[2]||x[0]),datasets:[{data:ep.map(x=>x[1]),backgroundColor:ep.map(x=>EMO[x[0]]?.[1]||'#888'),borderWidth:0}]},options:{maintainAspectRatio:false,cutout:'62%',plugins:{legend:{position:'bottom'}}}});
+ const b=d.bio_age;
+ mkc('cBio',{type:'bar',data:{labels:b.map((x,i)=>'#'+(i+1)),datasets:[{label:'Chronological',data:b.map(x=>x.chronological),backgroundColor:'#4f8cff',borderRadius:6},{label:'Phenotypic (estimate)',data:b.map(x=>x.phenotypic),backgroundColor:'#8b5cf6',borderRadius:6}]},options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom'}}}});
+ $('#bioEmpty').textContent=b.length?'Research estimates only — not a diagnosis.':'No assessments yet — add one in the Bio-Suite.';
+ $('#sys').innerHTML=Object.entries(d.capabilities).map(([k,v])=>`<span class="chip ${v===true?'ok':v===false?'warn':'info'}">${k.replace(/_/g,' ')}: ${v===true?'ready':v===false?'off':v}</span>`).join('');
+ loadSnaps();
+}
+async function loadSnaps(){
+ const s=await api('/api/snapshots');$('#snapCount').textContent=s.length+' saved';
+ $('#gallery').innerHTML=s.length?s.map(x=>`<figure><img loading="lazy" src="${x.url}" alt="${esc(x.caption)}" data-c="${x.snapshot_code}"><figcaption><span>${esc(x.caption||x.source)}</span><button class="btn sm danger" data-d="${x.snapshot_code}">✕</button></figcaption></figure>`).join(''):'<span class="muted">No snapshots yet. Use “Save snapshot” in the Expression Lab.</span>';
+ $$('#gallery img').forEach(i=>i.onclick=()=>modal(`<img class="big" src="${i.src}"><pre class="mono" style="white-space:pre-wrap;max-height:220px;overflow:auto">${esc(JSON.stringify(s.find(x=>x.snapshot_code===i.dataset.c).analysis,null,1))}</pre>`));
+ $$('#gallery [data-d]').forEach(b=>b.onclick=async()=>{if(confirm('Delete this snapshot?')){await api('/api/snapshots/'+b.dataset.d,{method:'DELETE'});loadSnaps();}});
+}
+const r=$('#renders');for(let i=1;i<=6;i++){const im=new Image();im.src='/static/img/render_'+i+'.png';im.onload=()=>{const f=document.createElement('figure');f.appendChild(im);f.insertAdjacentHTML('beforeend','<figcaption><span>3D render '+i+'</span></figcaption>');r.appendChild(f)}}
+load().catch(e=>toast(e.message,'bad'));
+</script></body></html>
